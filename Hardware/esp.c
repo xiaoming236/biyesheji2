@@ -4,12 +4,12 @@
 #include <string.h>
 #include "delay.h"
 #include "OLED.H"
-
-
+#include <stdlib.h>  
 #define WZ DHT11_Data.temp_int	
 #define WX DHT11_Data.temp_deci
 #define SZ DHT11_Data.humi_int	
 #define SX DHT11_Data.humi_deci
+
 extern int wen1;
 extern float shi1;
 
@@ -26,15 +26,17 @@ extern uint8_t fa;
 extern uint8_t rana;
 extern uint8_t ranb;
 extern char RECS[250];
-const char* WIFI ="1234";// WiFi名称
-const char* WIFIASSWORD="123456789";// WiFi密码
-const char* ClintID="123";
-
-const char* username="Ub99ifb8x7";
+// WiFi和MQTT配置参数
+const char* WIFI ="1234";               // WiFi名称
+const char* WIFIASSWORD="123456789";    // WiFi密码
+const char* ClintID="123";              // 客户端ID
+const char* username="Ub99ifb8x7";      // 用户名
 const char* passwd="version=2018-10-31&res=products%2FUb99ifb8x7%2Fdevices%2F123&et=2555971200&method=sha1&sign=IDjpzXY7v2ZeXgjA8aNTO6qveSo%3D";
-const char* Url="Ub99ifb8x7.mqtts.acc.cmcconenet.cn";// 阿里云MQTT服务器
-const char* pubtopic="$sys/Ub99ifb8x7/123/thing/property/post"; // 发布主题
-const char* subtopic="$sys/Ub99ifb8x7/123/thing/property/post/reply";// 订阅主题
+const char* Url="Ub99ifb8x7.mqtts.acc.cmcconenet.cn";  // 云MQTT服务器
+const char* pubtopic="$sys/Ub99ifb8x7/123/thing/property/post";    // 发布主题
+const char* subtopic="$sys/Ub99ifb8x7/123/thing/property/post/reply";  // 订阅主题
+
+
 const char* func1="temperature";  // 温度
 const char* func2="Humidity";  // 湿度
 const char* func3="yan";  // 烟雾
@@ -50,7 +52,7 @@ const char *func12="ran";
 const char *func14="ran1";
 const char *func15="ran2";
 
-
+// 声明外部函数
 int fputc(int ch,FILE *f )   //printf重定向  
 {
 	USART_SendData(USART1,(uint8_t)ch);
@@ -104,57 +106,55 @@ char esp_Init(void)
 //返回值：0：发送成功；1：发送失败
 char Esp_PUB(void)
 {
-    memset(RECS, 0, sizeof(RECS));
-    
-    // 合并后的AT指令，一次性上报所有数据
-    printf("AT+MQTTPUB=0,\"%s\",\""
-        "{"
-            "\\\"method\\\":\\\"thing.event.property.post\\\","  // 事件方法
-            "\\\"params\\\":{"
-                // 环境数据
-                "\\\"temperature\\\":%d,"   // 温度
-                "\\\"humidity\\\":%.1f,"    // 湿度
-                "\\\"yan\\\":%.1f,"         // MQ2烟雾
-                "\\\"ran\\\":%d,"           // MQ7一氧化碳
-                
-                // 设备状态
-                "\\\"feng\\\":%d,"          // 风扇
-                "\\\"shui\\\":%d,"          // 水泵
-                "\\\"bao\\\":%d,"           // 报警器
-                "\\\"fa\\\":%d,"            // 窗户
-                "\\\"yan1\\\":%d,"          // 烟雾阈值增加
-                "\\\"yan2\\\":%d,"          // 烟雾阈值减少
-                "\\\"rana\\\":%d,"          // 燃气阈值增加
-                "\\\"ranb\\\":%d,"          // 燃气阈值减少
-                "\\\"wena\\\":%d,"          // 温度阈值增加
-                "\\\"wenb\\\":%d"           // 温度阈值减少
-            "} "
-        "}\",0,0\r\n",
-        
-        pubtopic,   // 发布主题
-        
-        // 参数对应列表
-        wen1,         // 温度
-        shi1,         // 湿度
-        MQ2_Value,    // MQ2
-        MQ7_Value,    // MQ7
-        
-        feng,         // 风扇
-        shui,         // 水泵
-        bao,          // 报警器
-        fa,           // 窗户
-        yan1,         // 烟雾阈值增加
-        yan2,         // 烟雾阈值减少
-        rana,         // 燃气阈值增加
-        ranb,         // 燃气阈值减少
-        wena,         // 温度阈值增加
-        wenb          // 温度阈值减少
-    );
-
-    Delay_ms(200); // 适当延长等待时间
-    return (strstr(RECS, "ERROR") != NULL) ? 1 : 0;
+	memset(RECS,0,sizeof(RECS));
+//	printf("AT+MQTTPUB=0,\"%s\",\"{\\\"method\\\":\\\"thing.event.property.post\\\"\\,\\\"params\\\":{\\\"%s\\\":%d\\,\\\"%s\\\":%f\\,\\\"%s\\\":%d\\,\\\"%s\\\":%d\\,\\\"%s\\\":%d\\,\\\"%s\\\":%d\\,\\\"%s\\\":%d\\,\\\"%s\\\":%d\\,\\\"%s\\\":%d\\}}\",0,0\r\n",
+//	pubtopic,func1,wen1,func2,shi1,func3,MQ2_Value,func4,deng1,func5,guang1,func6,guang2,func7,shi11,func8,shi22,func9,duoji);
+	 // 第一组数据上报：环境数据
+	printf("AT+MQTTPUB=0,\"%s\",\""
+       "{"
+           "\\\"id\\\":\\\"123\\\","
+           "\\\"version\\\":\\\"1.0\\\","
+           "\\\"params\\\":{"
+           "\\\"%s\\\":{\\\"value\\\":%d},"
+           "\\\"%s\\\":{\\\"value\\\":%.f},"
+           "\\\"%s\\\":{\\\"value\\\":%.f},"
+           "\\\"%s\\\":{\\\"value\\\":%d}"
+            "}"
+       "}\",0,0\r\n",
+	pubtopic,// 发布主题
+	func1,wen1,// 温度
+	func2,shi1,// 湿度
+	func3,MQ2_Value,// MQ2烟雾值
+	func12,MQ7_Value// MQ7一氧化碳值
+	);
+	// 第二组数据上报：设备状态
+	printf("AT+MQTTPUB=0,\"%s\",\""
+       "{"
+           "\\\"id\\\":\\\"123\\\","
+           "\\\"version\\\":\\\"1.0\\\","
+           "\\\"params\\\":{"
+               "\\\"%s\\\":{\\\"value\\\":%d},"
+               "\\\"%s\\\":{\\\"value\\\":%d},"
+               "\\\"%s\\\":{\\\"value\\\":%d},"
+               "\\\"%s\\\":{\\\"value\\\":%d},"
+               "\\\"%s\\\":{\\\"value\\\":%d},"
+               "\\\"%s\\\":{\\\"value\\\":%d},"
+               "\\\"%s\\\":{\\\"value\\\":%d},"
+               "\\\"%s\\\":{\\\"value\\\":%d},"
+               "\\\"%s\\\":{\\\"value\\\":%d},"
+               "\\\"%s\\\":{\\\"value\\\":%d}"
+           "}"
+       "}\",0,0\r\n",
+	 pubtopic, 
+        func4,feng, func5,yan1, func6,yan2, func7,wena, func8,wenb,
+        func9,shui, func10,bao, func11,fa, func14,rana, func15,ranb);
+	//while(RECS[0]);//等待ESP返回数据
+////	printf("AT+MQTTPUB=0,\"%s\",/thing/event/property/post","{\"params\":{\"Temperature\":27}}",0,0);
+	Delay_ms(200);//延时等待数据接收完成
+	if(strcmp(RECS,"ERROR")==0)
+		return 1;
+	return 0;
 }
-
 void CommandAnalyse(void)
 {
 	// 检查是否收到MQTT消息
@@ -222,6 +222,7 @@ void CommandAnalyse(void)
 		}
 	}
 }
+
 
 
 
