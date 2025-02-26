@@ -1,198 +1,404 @@
-#include "stm32f10x.h"               
-#include "MyUSART.h"
+#include "stm32f10x.h"                
+#include "delay.h"
+#include "OLED.h"
+#include "OELD_Data.h"
+#include "FMQ.h"
+#include "MQ2.h"
+#include "dht11.h"
+#include "key.h"
+#include "ad.h"
+#include "PWM.h"
+#include "beep.h"
+#include "MyUSART.H"
+#include "esp.h"
+#include "Servo.h"
+#include "MQ7.h"
+#include "stepmotor.h"
 #include <stdio.h>
 #include <string.h>
-#include "delay.h"
-#include "OLED.H"
-#include <stdlib.h>  
 #define WZ DHT11_Data.temp_int	
 #define WX DHT11_Data.temp_deci
 #define SZ DHT11_Data.humi_int	
 #define SX DHT11_Data.humi_deci
 
-extern float wen1;
-extern float shi1;
+// 变量定义
+u16 MQ7_Value;//adc值
+uint16_t fire,y,r,w,h,Y,W,R;
+float temp_one,shi1;//电压值
+float MQ2_Value;              
+DHT11_Data_TypeDef  DHT11_Data;
+// 控制标志位
 
-extern float MQ2_Value;
-extern int MQ7_Value;
-extern uint8_t yan1;
-extern uint8_t yan2;
-extern uint8_t feng;
-extern uint8_t wena;
-extern uint8_t wenb;
-extern uint8_t shui;
-extern uint8_t bao;
-extern uint8_t fa;
-extern uint8_t rana;
-extern uint8_t ranb;
-extern char RECS[250];
-// WiFi和MQTT配置参数
-const char* WIFI ="1234";               // WiFi名称
-const char* WIFIASSWORD="123456789";    // WiFi密码
-const char* ClintID="123";              // 设备ID
-const char* username="Ub99ifb8x7";      // 产品id
-const char* passwd="version=2018-10-31&res=products%2FUb99ifb8x7%2Fdevices%2F123&et=2555971200&method=sha1&sign=IDjpzXY7v2ZeXgjA8aNTO6qveSo%3D";//密钥
-const char* Url="mqtts.heclouds.com";  // 云MQTT服务器
-const char* pubtopic="$sys/Ub99ifb8x7/123/thing/property/post";    // 发布主题
-const char* subtopic="$sys/Ub99ifb8x7/123/thing/property/post/reply";  // 订阅主题
+//uint16_t key = 0, flag1 = 0, flag2 = 0, flag3 = 0,flag5 = 0,flag6 = 0,AD=0,wen1,A=0,tem=28,yan=70,ran=60,Judge,cnt;
+// 各种标志位和控制变量
+uint16_t key = 0;     // 按键值存储变量
+uint16_t flag1 = 0;   // 模式切换标志位
+uint16_t flag2 = 0;   // 通用标志位
+uint16_t flag3 = 0;   // 设置模式标志位
+uint16_t flag5 = 0;   // 燃气检测标志位
+uint16_t flag6 = 0;   // 舵机控制标志位
+uint16_t AD = 0;      // AD转换值存储
+float wen1;        // 温度值存储
+uint16_t A = 0;       // 通用计数器
+uint16_t tem = 28;    // 温度阈值（28度）
+uint16_t yan = 70;    // 烟雾阈值（70%）
+uint16_t ran = 60;    // 燃气阈值（60%）
+uint16_t Judge;       // WiFi连接判断标志
+uint16_t cnt;         // 计数器
+// DHT11温湿度传感器相关变量
+uint8_t temp_int;     // 温度整数部分
+uint8_t temp_deci;    // 温度小数部分
+uint8_t humi_int;     // 湿度整数部分
+uint8_t humi_deci;    // 湿度小数部分
+// 远程控制标志位（'0'表示关闭，'1'表示开启）
+uint8_t yan1='0';// 烟雾阈值增加控制位
+uint8_t yan2='0';// 烟雾阈值减少控制位
+uint8_t feng='0';// 风扇控制位
+uint8_t wena='0';// 温度阈值增加控制位
+uint8_t wenb='0';// 温度阈值减少控制位
+uint8_t shui='0';// 水泵控制位
+uint8_t bao='0'; // 报警器控制位
+uint8_t fa='0';// 窗户（舵机）控制位
+uint8_t rana='0';// 燃气co阈值增加控制位
+uint8_t ranb='0';  // 燃气co阈值减少控制位
+uint8_t display_page = 0;
+static uint8_t auto_fan_state = 0;    // 风扇自动控制状态
+static uint8_t auto_pump_state = 0;   // 水泵自动控制状态
 
-
-const char* func1="temperature";  // 温度
-const char* func2="humidity";  // 湿度
-const char* func3="yan";  // 烟雾
-const char* func4="feng"; // 风扇
-const char* func5="yan1"; // 烟雾1
-const char* func6="yan2";	 // 烟雾2
-const char* func7="wen1";
-const char* func8="wen2";
-const char* func9="shui";
-const char *func10="bao";
-const char *func11="fa";
-const char *func12="ran";
-const char *func14="ran1";
-const char *func15="ran2";
-
-// 声明外部函数
-int fputc(int ch,FILE *f )   //printf重定向  
+// 显示第一页
+void Display_Page1(void)
 {
-	USART_SendData(USART1,(uint8_t)ch);
-	while(USART_GetFlagStatus (USART1,USART_FLAG_TC) == RESET);
-	return ch;
-}
-char esp_Init(void)
-{
-	memset(RECS,0,sizeof(RECS));
-	printf("AT+RST\r\n");  //重启
-	Delay_ms(2000);
-	
-	memset(RECS,0,sizeof(RECS));
-	printf("ATE0\r\n");    //关闭回显
-	Delay_ms(10);
-	if(strcmp(RECS,"OK"))
-		return 1;
-	
-	printf("AT+CWMODE=1\r\n"); //Station模式
-	Delay_ms(1000);
-	if(strcmp(RECS,"OK"))
-		return 2;
-	
-	memset(RECS,0,sizeof(RECS));
-	printf("AT+CWJAP=\"%s\",\"%s\"\r\n",WIFI,WIFIASSWORD); //连接热点
-	Delay_ms(2000);
-	if(strcmp(RECS,"OK"))
-		return 3;
-	
-	memset(RECS,0,sizeof(RECS));
-	printf("AT+MQTTUSERCFG=0,1,\"%s\",\"%s\",\"%s\",0,0,\"\"\r\n",ClintID,username,passwd);//用户信息配置
-	Delay_ms(10);
-	if(strcmp(RECS,"OK"))
-		return 4;
-	
-	memset(RECS,0,sizeof(RECS));
-	printf("AT+MQTTCONN=0,\"%s\",1883,1\r\n",Url); //连接服务器
-	Delay_ms(1000);
-	if(strcmp(RECS,"OK"))
-		return 5;
-	
-	printf("AT+MQTTSUB=0,\"%s\",1\r\n",subtopic); //订阅消息
-	Delay_ms(500);
-	if(strcmp(RECS,"OK"))			
-		return 5;
-	memset(RECS,0,sizeof(RECS));
-	return 0;
-}
-//数据上报实现功能：esp发送消息
-//参数：无
-//返回值：0：发送成功；1：发送失败
-char Esp_PUB(void)
-{
-	memset(RECS,0,sizeof(RECS));
-//	printf("AT+MQTTPUB=0,\"%s\",\"{\\\"method\\\":\\\"thing.event.property.post\\\"\\,\\\"params\\\":{\\\"%s\\\":%d\\,\\\"%s\\\":%f\\,\\\"%s\\\":%d\\,\\\"%s\\\":%d\\,\\\"%s\\\":%d\\,\\\"%s\\\":%d\\,\\\"%s\\\":%d\\,\\\"%s\\\":%d\\,\\\"%s\\\":%d\\}}\",0,0\r\n",
-//	pubtopic,func1,wen1,func2,shi1,func3,MQ2_Value,func4,deng1,func5,guang1,func6,guang2,func7,shi11,func8,shi22,func9,duoji);
-	 // 第一组数据上报：环境数据
-		printf("AT+MQTTPUB=0,\"$sys/Ub99ifb8x7/123/thing/property/post\",\"{\\\"id\\\":\\\"123\\\"\\,\\\"params\\\":{\\\"%s\\\":{\\\"value\\\":%.1f\\}}}\",0,0\r\n",func1,wen1);
+    OLED_Clear();
+    // 温度显示
+	if(Read_DHT11(&DHT11_Data) == SUCCESS)
+	{OLED_ShowChinese(0, 0, "温度:");
+    OLED_ShowNum(40, 0, WZ, 2, OLED_8X16);    // 使用WZ替代DHT11_Data.temp_int
+    OLED_ShowString(56, 0, ".", OLED_8X16);
+    OLED_ShowNum(64, 0, WX, 1, OLED_8X16);    // 使用WX替代DHT11_Data.temp_deci
+    OLED_ShowString(72, 0, "C", OLED_8X16);
+    
+    // 湿度显示
+    OLED_ShowChinese(0, 16, "湿度:");
+    OLED_ShowNum(40, 16, SZ, 2, OLED_8X16);   // 使用SZ替代DHT11_Data.humi_int
+    OLED_ShowString(56, 16, ".", OLED_8X16);
+    OLED_ShowNum(64, 16, SX, 1, OLED_8X16);   // 使用SX替代DHT11_Data.humi_deci
+    OLED_ShowString(72, 16, "%", OLED_8X16);
 
+    // 页面指示
+    OLED_ShowString(95, 0, "P:1/3", OLED_8X16);
 	
-	//while(RECS[0]);//等待ESP返回数据
-////	printf("AT+MQTTPUB=0,\"%s\",/thing/event/property/post","{\"params\":{\"Temperature\":27}}",0,0);
-	Delay_ms(200);//延时等待数据接收完成
-	if(strcmp(RECS,"ERROR")==0)
-		return 1;
-	return 0;
-}
-void CommandAnalyse(void)
-{
-	// 检查是否收到MQTT消息
-	if(strncmp(RECS,"+MQTTSUBRECV:",13)==0)
-	{
-		uint8_t i=0;
-		while(RECS[i++] != '\0')             
-		{
-			 // 处理风扇控制命令
-            if(strncmp((RECS+i),func4,4)==0)
-			{ 
-				while(RECS[i++] != ':');
-				feng=RECS[i];
-			}
-			 // 处理烟雾传感器1控制
-			if(strncmp((RECS+i),func5,4)==0)
-			{
-				while(RECS[i++] != ':');       
-				yan1=RECS[i];
-			}
-			 // 处理水浸传感器控制
-			if(strncmp((RECS+i),func6,4)==0)
-			{
-				while(RECS[i++] != ':');
-				yan2=RECS[i];
-			}
-			 // 处理报警器控制
-			if(strncmp((RECS+i),func7,4)==0)
-			{
-				while(RECS[i++] != ':');
-				wena=RECS[i];
-			}
-			// 处理窗户控制
-			if(strncmp((RECS+i),func8,4)==0)
-			{
-				while(RECS[i++] != ':');
-				wenb=RECS[i];
-			}
-			
-			if(strncmp((RECS+i),func9,4)==0)
-			{
-				while(RECS[i++] != ':');
-				shui=RECS[i];
-			}
-			if(strncmp((RECS+i),func10,3)==0)
-			{
-				while(RECS[i++] != ':');
-				bao=RECS[i];
-			}
-				if(strncmp((RECS+i),func11,2)==0)
-			{
-				while(RECS[i++] != ':');
-				fa=RECS[i];
-			}
-			if(strncmp((RECS+i),func14,4)==0)
-			{
-				while(RECS[i++] != ':');
-				rana=RECS[i];
-			}
-			if(strncmp((RECS+i),func15,4)==0)
-			{
-				while(RECS[i++] != ':');
-				ranb=RECS[i];
-			}
-		}
+		 OLED_Update();
 	}
+	  Delay_ms(200);
+	   OLED_Update();
+}
+
+// 显示第二页
+void Display_Page2(void)
+{
+	
+    OLED_Clear();
+    // 烟雾值显示
+    OLED_ShowChinese(0, 0, "烟雾:");
+    OLED_ShowNum(40, 0, MQ2_Value, 3, OLED_8X16);
+    
+    // CO值显示
+    OLED_ShowString(0, 16, "CO:", OLED_8X16);
+    OLED_ShowNum(32, 16, MQ7_Value, 3, OLED_8X16);
+
+    // 页面指示
+    OLED_ShowString(95, 0, "P:2/3", OLED_8X16);
+}
+
+// 显示第三页
+void Display_Page3(void)
+{
+    OLED_Clear();
+    // 火焰状态
+    OLED_ShowChinese(0, 0, "火:");
+    OLED_ShowString(40, 0, fire ? "WARNING" : "NORMAL", OLED_8X16);
+    
+    // 控制状态
+    OLED_ShowString(0, 16, feng=='1' ? "Fan:ON" : "Fan:OFF", OLED_8X16);
+    OLED_ShowString(64, 16, shui=='1' ? "Pump:ON" : "Pump:OFF", OLED_8X16);
+    
+    // 页面指示
+    OLED_ShowString(95, 0, "P:3/3", OLED_8X16);
+	
 }
 
 
+int main(void)
+{   
+	    // 初始化外设
+    MyUSART_Init();
+    AD_Init();
+    Adc_Init();
+    OLED_Init();
+    mfq_Init();
+    BEEP_Init();
+    KEY_Init();
+    DHT11_GPIO_Config();
+    Adc_Init1();
+    MOTOR_Init();
+    Servo_Init();
+
+    // 尝试连接WiFi，但不阻塞程序
+    Judge = esp_Init();
+
+    while(1)
+    {    
+        // WiFi连接成功才执行数据上报
+        if(!Judge)
+        {
+            cnt++;
+            if(cnt==6) //约每6s执行一次数据上报
+            {
+                if(Esp_PUB() == 1)
+                {
+                    Delay_ms(200);
+                }
+                cnt=0;                     
+            }
+        }
+         float wendu=WZ+WX/10.0;
+				float shidu=SZ+SX/10.0;
+        // 获取传感器数据
+        fire = IR_FireData();
+        MQ2_Value=Get_Adc_Average1(ADC_Channel_3,10)*100/4095;//模拟烟雾浓度的值
+        MQ7_Value=Get_Adc_Average1(ADC_Channel_1,10)*100/4095;//模拟co浓度的值
+        key = KEY_Scan(0);
+       wen1=wendu;
+		 shi1=shidu;
+//	printf("AT+MQTTPUB=0,\"$sys/Ub99ifb8x7/123/thing/property/post\",\"{\\\"id\\\":\\\"123\\\"\\,\\\"params\\\":{\\\"temperature\\\":{\\\"value\\\":%.1f\\}}}\",0,0\r\n",wen1);
+		
+        // 按键切换模式
+         
+	// 按键处理
+if(key)
+{
+    switch(key)
+    {
+        case KEY0_PRES:  // 按键1：同时控制风扇和窗户
+            auto_fan_state = 0;  // 清除自动控制状态
+            feng = (feng == '0') ? '1' : '0';
+            fa = feng;  // 窗户状态跟随风扇状态
+            if(feng == '1')
+            {
+                fengkai();           // 开启风扇
+                Servo_SetAngle(180); // 打开窗户
+            }
+            else
+            {
+                fengguan();         // 关闭风扇
+                Servo_SetAngle(0);  // 关闭窗户
+            }
+            break;
+            
+        case KEY1_PRES:  // 按键2：控制水泵
+            auto_pump_state = 0;  // 清除自动控制状态
+            shui = (shui == '0') ? '1' : '0';
+            if(shui == '1')
+                shuikai();
+            else
+                shuiguan();
+            break;
+						
+				case KEY2_PRES:  // 按键3：切换远程控制模式
+            flag3 = (flag3 == 4) ? 0 : 4;  // 在普通模式和远程模式之间切换
+            break;
+            
+        case KEY3_PRES:  // 按键4：翻页显示
+            if(flag3 != 4)  // 非远程模式下才切换页面
+                display_page = (display_page + 1) % 3;
+            break;
+    }
+}	
+				
+				
+        // 根据页面显示不同内容
+       switch(display_page)
+{
+    case 0:
+        Display_Page1();
+        break;
+    case 1:
+        Display_Page2();
+        break;
+    case 2:
+        Display_Page3();
+        break;
+   
+}
+
+        
+// 主循环中的显示控制部分
+if(flag3 == 4)  // 远程控制模式
+{
+    OLED_Clear();
+    OLED_ShowChinese(0, 0, "远程");
+    
+    // 显示当前阈值
+    OLED_ShowChinese(0, 16, "温度:");
+    OLED_ShowNum(40, 16, tem, 2, OLED_8X16);
+    OLED_ShowString(64, 16, "C", OLED_8X16);
+    
+    OLED_ShowChinese(0, 32, "烟雾:");
+    OLED_ShowNum(40, 32, yan, 2, OLED_8X16);
+    OLED_ShowString(64, 32, "%", OLED_8X16);
+    
+    OLED_ShowString(0, 48, "CO:", OLED_8X16);
+    OLED_ShowNum(32, 48, ran, 2, OLED_8X16);
+    OLED_ShowString(56, 48, "%", OLED_8X16);
+}
+else  // 普通显示模式
+{
+    switch(display_page)
+    {
+        case 0:
+            Display_Page1();
+            break;
+        case 1:
+            Display_Page2();
+            break;
+        case 2:
+            Display_Page3();
+				    break;
+    }
+}
+
+// 远程控制处理（放在主循环中）
+if(flag3 == 4)
+{
+    // 温度阈值远程调节
+    if(wena == '1')
+    {
+        tem = tem + 1;
+        if(tem > 40) tem = 40;
+    }
+    if(wenb == '1')
+    {
+        tem = tem - 1;
+        if(tem < 20) tem = 20;
+    }
+    
+    // 烟雾阈值远程调节
+    if(yan1 == '1')
+    {
+        yan = yan + 1;
+        if(yan > 80) yan = 80;
+    }
+    if(yan2 == '1')
+    {
+        yan = yan - 1;
+        if(yan < 20) yan = 20;
+    }
+    
+    // CO阈值远程调节
+    if(rana == '1')
+    {
+        ran = ran + 1;
+        if(ran > 80) ran = 80;
+    }
+    if(ranb == '1')
+    {
+        ran = ran - 1;
+        if(ran < 20) ran = 20;
+    }
+    
+    // 远程设备控制（保持原有功能）
+    if(feng == '1')
+        fengkai();
+    else if(feng == '0')
+        fengguan();
+        
+    if(shui == '1')
+        shuikai();
+    else if(shui == '0')
+        shuiguan();
+        
+    if(bao == '1')
+        BEEP = 1;
+    else if(bao == '0')
+        BEEP = 0;
+        
+    if(fa == '1' && flag6 == 0)
+    {
+        Servo_SetAngle(180);
+        flag6 = 1;
+    }
+    else if(fa == '0' && flag6 == 1)
+    {
+        Servo_SetAngle(0);
+        flag6 = 0;
+    }
+}
+       
+/// 报警检测和自动控制
+// 火灾检测控制水泵
+if(fire) 
+{
+    BEEP = 1;           // 开启蜂鸣器
+    if(!auto_pump_state)  // 如果不是已经自动开启
+    {
+        shuikai();        // 开启水泵
+        shui = '1';       // 更新水泵状态
+        auto_pump_state = 1; // 标记为自动开启
+    }
+}
+else  // 火灾解除
+{
+    if(auto_pump_state)  // 如果是自动开启的水泵
+    {
+        shuiguan();       // 关闭水泵
+        shui = '0';       // 更新水泵状态
+        auto_pump_state = 0; // 清除自动标记
+    }
+}
+
+// 烟雾、CO浓度或温度检测控制风扇和窗户
+if(MQ2_Value > yan || MQ7_Value > ran || DHT11_Data.temp_int > tem)
+{
+    BEEP = 1;             // 开启蜂鸣器
+    if(!auto_fan_state)   // 如果不是已经自动开启
+    {
+        fengkai();           // 开启风扇
+        feng = '1';          // 更新风扇状态
+        Servo_SetAngle(180); // 打开窗户
+        fa = '1';            // 更新窗户状态
+        auto_fan_state = 1;  // 标记为自动开启
+    }
+}
+else  // 参数恢复正常
+{
+    if(auto_fan_state)    // 如果是自动开启的风扇和窗户
+    {
+        fengguan();          // 关闭风扇
+        feng = '0';          // 更新风扇状态
+        Servo_SetAngle(0);   // 关闭窗户
+        fa = '0';            // 更新窗户状态
+        auto_fan_state = 0;  // 清除自动标记
+        BEEP = 0;            // 关闭蜂鸣器
+    }
+}
 
 
-
-
-
-
-
+        
+        // WiFi数据上报
+        if(!Judge)
+        {
+            cnt++;
+            if(cnt == 6)
+            {
+                if(Esp_PUB() == 1)
+                {
+                    Delay_ms(200);
+                }
+                cnt = 0;
+            }
+        }
+        
+        OLED_Update();
+        Delay_ms(100);
+    }
+}
