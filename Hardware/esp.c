@@ -1,4 +1,4 @@
-#include "stm32f10x.h"                  // Device header
+#include "stm32f10x.h"               
 #include "MyUSART.h"
 #include <stdio.h>
 #include <string.h>
@@ -10,7 +10,7 @@
 #define SZ DHT11_Data.humi_int	
 #define SX DHT11_Data.humi_deci
 
-extern int wen1;
+extern float wen1;
 extern float shi1;
 
 extern float MQ2_Value;
@@ -29,16 +29,16 @@ extern char RECS[250];
 // WiFi和MQTT配置参数
 const char* WIFI ="1234";               // WiFi名称
 const char* WIFIASSWORD="123456789";    // WiFi密码
-const char* ClintID="123";              // 客户端ID
-const char* username="Ub99ifb8x7";      // 用户名
-const char* passwd="version=2018-10-31&res=products%2FUb99ifb8x7%2Fdevices%2F123&et=2555971200&method=sha1&sign=IDjpzXY7v2ZeXgjA8aNTO6qveSo%3D";
-const char* Url="Ub99ifb8x7.mqtts.acc.cmcconenet.cn";  // 云MQTT服务器
+const char* ClintID="123";              // 设备ID
+const char* username="Ub99ifb8x7";      // 产品id
+const char* passwd="version=2018-10-31&res=products%2FUb99ifb8x7%2Fdevices%2F123&et=2555971200&method=sha1&sign=IDjpzXY7v2ZeXgjA8aNTO6qveSo%3D";//密钥
+const char* Url="mqtts.heclouds.com";  // 云MQTT服务器
 const char* pubtopic="$sys/Ub99ifb8x7/123/thing/property/post";    // 发布主题
 const char* subtopic="$sys/Ub99ifb8x7/123/thing/property/post/reply";  // 订阅主题
 
 
 const char* func1="temperature";  // 温度
-const char* func2="Humidity";  // 湿度
+const char* func2="humidity";  // 湿度
 const char* func3="yan";  // 烟雾
 const char* func4="feng"; // 风扇
 const char* func5="yan1"; // 烟雾1
@@ -110,44 +110,9 @@ char Esp_PUB(void)
 //	printf("AT+MQTTPUB=0,\"%s\",\"{\\\"method\\\":\\\"thing.event.property.post\\\"\\,\\\"params\\\":{\\\"%s\\\":%d\\,\\\"%s\\\":%f\\,\\\"%s\\\":%d\\,\\\"%s\\\":%d\\,\\\"%s\\\":%d\\,\\\"%s\\\":%d\\,\\\"%s\\\":%d\\,\\\"%s\\\":%d\\,\\\"%s\\\":%d\\}}\",0,0\r\n",
 //	pubtopic,func1,wen1,func2,shi1,func3,MQ2_Value,func4,deng1,func5,guang1,func6,guang2,func7,shi11,func8,shi22,func9,duoji);
 	 // 第一组数据上报：环境数据
-	printf("AT+MQTTPUB=0,\"%s\",\""
-       "{"
-           "\\\"id\\\":\\\"123\\\","
-           "\\\"version\\\":\\\"1.0\\\","
-           "\\\"params\\\":{"
-           "\\\"%s\\\":{\\\"value\\\":%d},"
-           "\\\"%s\\\":{\\\"value\\\":%.f},"
-           "\\\"%s\\\":{\\\"value\\\":%.f},"
-           "\\\"%s\\\":{\\\"value\\\":%d}"
-            "}"
-       "}\",0,0\r\n",
-	pubtopic,// 发布主题
-	func1,wen1,// 温度
-	func2,shi1,// 湿度
-	func3,MQ2_Value,// MQ2烟雾值
-	func12,MQ7_Value// MQ7一氧化碳值
-	);
-	// 第二组数据上报：设备状态
-	printf("AT+MQTTPUB=0,\"%s\",\""
-       "{"
-           "\\\"id\\\":\\\"123\\\","
-           "\\\"version\\\":\\\"1.0\\\","
-           "\\\"params\\\":{"
-               "\\\"%s\\\":{\\\"value\\\":%d},"
-               "\\\"%s\\\":{\\\"value\\\":%d},"
-               "\\\"%s\\\":{\\\"value\\\":%d},"
-               "\\\"%s\\\":{\\\"value\\\":%d},"
-               "\\\"%s\\\":{\\\"value\\\":%d},"
-               "\\\"%s\\\":{\\\"value\\\":%d},"
-               "\\\"%s\\\":{\\\"value\\\":%d},"
-               "\\\"%s\\\":{\\\"value\\\":%d},"
-               "\\\"%s\\\":{\\\"value\\\":%d},"
-               "\\\"%s\\\":{\\\"value\\\":%d}"
-           "}"
-       "}\",0,0\r\n",
-	 pubtopic, 
-        func4,feng, func5,yan1, func6,yan2, func7,wena, func8,wenb,
-        func9,shui, func10,bao, func11,fa, func14,rana, func15,ranb);
+		printf("AT+MQTTPUB=0,\"$sys/Ub99ifb8x7/123/thing/property/post\",\"{\\\"id\\\":\\\"123\\\"\\,\\\"params\\\":{\\\"%s\\\":{\\\"value\\\":%.1f\\}}}\",0,0\r\n",func1,wen1);
+
+	
 	//while(RECS[0]);//等待ESP返回数据
 ////	printf("AT+MQTTPUB=0,\"%s\",/thing/event/property/post","{\"params\":{\"Temperature\":27}}",0,0);
 	Delay_ms(200);//延时等待数据接收完成
